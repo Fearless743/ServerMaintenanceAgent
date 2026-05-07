@@ -1,0 +1,107 @@
+version: '3.8'
+
+services:
+  # PostgreSQL数据库
+  postgres:
+    image: postgres:14-alpine
+    container_name: server-maintenance-db
+    environment:
+      POSTGRES_DB: server_maintenance
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - server-maintenance
+
+  # Redis缓存
+  redis:
+    image: redis:7-alpine
+    container_name: server-maintenance-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - server-maintenance
+
+  # 后端API服务
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: server-maintenance-backend
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/server_maintenance
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4}
+      CORS_ORIGIN: http://localhost:3000
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend/logs:/app/logs
+    networks:
+      - server-maintenance
+
+  # 前端应用
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: server-maintenance-frontend
+    environment:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+      NEXT_PUBLIC_WS_URL: ws://localhost:3001
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    networks:
+      - server-maintenance
+
+  # Go子代理（可选，用于本地测试）
+  agent:
+    build:
+      context: ./agent
+      dockerfile: Dockerfile
+    container_name: server-maintenance-agent
+    environment:
+      AGENT_SERVER_URL: ws://backend:3001/ws/agent
+      AGENT_ID: test-agent-001
+      AGENT_AUTH_TOKEN: ${AGENT_AUTH_TOKEN}
+    depends_on:
+      - backend
+    networks:
+      - server-maintenance
+    profiles:
+      - with-agent
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  server-maintenance:
+    driver: bridge
