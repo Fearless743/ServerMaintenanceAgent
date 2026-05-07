@@ -1,7 +1,7 @@
 ---
 plan name: server-maintenance-agent
 plan description: Build AI-driven server maintenance agent system
-plan status: active
+plan status: done
 ---
 
 ## Idea
