@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  agent:
+    build: .
+    container_name: server-maintenance-agent
+    ports:
+      - "8080:8080"
+      - "9090:9090"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - SERVER_PORT=8080
+      - DB_PATH=/app/data/agent.db
+      - CHECK_INTERVAL=${CHECK_INTERVAL:-300s}
+      - LEARNING_ENABLED=${LEARNING_ENABLED:-true}
+      - MAX_CONCURRENT=${MAX_CONCURRENT:-5}
+    volumes:
+      - agent-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:8080/api/dashboard/stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  agent-data:
+    driver: local
